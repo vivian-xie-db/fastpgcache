@@ -187,7 +187,7 @@ Initialize the cache client.
 - `token_provider` (TokenProvider, optional): Token provider for automatic credential rotation
 - `minconn` (int): Minimum connections in pool (default: 1)
 - `maxconn` (int): Maximum connections in pool (default: 10)
-- `auto_setup` (bool): Automatically run setup() (default: False)
+- `auto_setup` (bool): Automatically run setup() if not already set up (default: True)
 
 ### Methods
 

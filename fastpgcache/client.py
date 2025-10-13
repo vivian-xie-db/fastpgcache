@@ -40,7 +40,7 @@ class FastPgCache:
         token_provider = None,
         minconn: int = 1,
         maxconn: int = 10,
-        auto_setup: bool = False
+        auto_setup: bool = True
     ):
         """
         Initialize FastPgCache connection.
@@ -56,7 +56,7 @@ class FastPgCache:
             token_provider: TokenProvider instance for automatic credential rotation
             minconn: Minimum connections in pool (default: 1)
             maxconn: Maximum connections in pool (default: 10)
-            auto_setup: Automatically run setup() on initialization (default: False)
+            auto_setup: Automatically run setup() on initialization if not already set up (default: True)
         """
         self.connection_string = connection_string
         self.host = host
