@@ -73,7 +73,9 @@ class FastPgCache:
         self._create_connection_pool()
         
         if auto_setup:
-            self.setup()
+            # Only setup if not already done
+            if not self.is_setup():
+                self.setup()
     
     def _create_connection_pool(self):
         """Create or recreate the connection pool."""
@@ -136,15 +138,37 @@ class FastPgCache:
         if last_error:
             raise last_error
     
-    def setup(self) -> bool:
+    def is_setup(self) -> bool:
+        """
+        Check if the cache system is already set up.
+        
+        Returns:
+            True if cache table exists, False otherwise
+        """
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor() as cursor:
+                    # Simple check - try to query the cache table
+                    cursor.execute("SELECT 1 FROM cache LIMIT 0")
+                    return True
+        except psycopg2.Error:
+            # Table doesn't exist or other error
+            return False
+    
+    def setup(self, force_recreate: bool = False) -> bool:
         """
         Initialize the cache system by creating tables and functions.
         Should be run once before using the cache.
         
+        Args:
+            force_recreate: If True, drops and recreates all objects (loses data).
+                          If False (default), creates objects only if they don't exist.
+        
         Returns:
             True if setup was successful
         """
-        setup_sql = """
+        if force_recreate:
+            drop_sql = """
 -- Drop existing objects if they exist
 DROP TABLE IF EXISTS cache CASCADE;
 DROP FUNCTION IF EXISTS cache_set(TEXT, TEXT, INTEGER);
@@ -153,9 +177,15 @@ DROP FUNCTION IF EXISTS cache_delete(TEXT);
 DROP FUNCTION IF EXISTS cache_exists(TEXT);
 DROP FUNCTION IF EXISTS cache_cleanup();
 DROP FUNCTION IF EXISTS cache_ttl(TEXT);
-
--- Create UNLOGGED table for caching
-CREATE UNLOGGED TABLE cache (
+"""
+            with self._get_connection() as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute(drop_sql)
+                    conn.commit()
+        
+        setup_sql = """
+-- Create UNLOGGED table for caching (only if not exists)
+CREATE UNLOGGED TABLE IF NOT EXISTS cache (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL,
     expires_at TIMESTAMP WITH TIME ZONE,
@@ -163,8 +193,8 @@ CREATE UNLOGGED TABLE cache (
     accessed_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Create index for expiry cleanup
-CREATE INDEX idx_cache_expires_at ON cache(expires_at) 
+-- Create index for expiry cleanup (only if not exists)
+CREATE INDEX IF NOT EXISTS idx_cache_expires_at ON cache(expires_at) 
 WHERE expires_at IS NOT NULL;
 
 -- Function: SET a cache value with optional TTL

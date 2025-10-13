@@ -15,7 +15,7 @@ def read_readme():
 
 setup(
     name="fastpgcache",
-    version="0.1.0",
+    version="0.1.2",
     description="A fast Redis-like caching library using PostgreSQL",
     long_description=read_readme(),
     long_description_content_type="text/markdown",

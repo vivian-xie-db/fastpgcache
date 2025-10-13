@@ -42,6 +42,43 @@ Or add to your `requirements.txt`:
 fastpgcache[databricks]>=0.1.0
 ```
 
+## Usage Patterns
+
+### One-Time Setup (Recommended for Production)
+
+```python
+from fastpgcache import FastPgCache
+
+# FIRST TIME ONLY - Run once per database (e.g., deployment script)
+cache = FastPgCache("postgresql://user:pass@localhost/mydb")
+cache.setup()  # Creates tables and functions
+cache.close()
+```
+
+Then in your application:
+```python
+# All subsequent uses - NO setup() needed!
+cache = FastPgCache("postgresql://user:pass@localhost/mydb")
+cache.set("key", "value")  # Ready to use immediately
+```
+
+### Auto-Setup (Convenient for Development)
+
+```python
+# Now intelligent - only runs setup if needed
+cache = FastPgCache("postgresql://user:pass@localhost/mydb", auto_setup=True)
+cache.set("key", "value")  # Ready to use immediately
+```
+
+### Conditional Setup (Full Control)
+
+```python
+cache = FastPgCache("postgresql://user:pass@localhost/mydb")
+if not cache.is_setup():
+    cache.setup()
+# Use cache...
+```
+
 ## Databricks Token Authentication
 
 ### The Solution: DatabricksTokenProvider
@@ -154,13 +191,39 @@ Initialize the cache client.
 
 ### Methods
 
-#### setup()
+#### is_setup()
 
-Initialize cache tables and functions. Run this once before using the cache.
+Check if the cache system is already initialized.
+
+**Returns:** `bool` - True if cache table exists
 
 ```python
-cache.setup()
+if not cache.is_setup():
+    cache.setup()
 ```
+
+#### setup(force_recreate=False)
+
+Initialize cache tables and functions. Safe to run multiple times.
+
+**Parameters:**
+- `force_recreate` (bool): If True, drops and recreates all objects (⚠️ loses all cache data). If False (default), creates objects only if they don't exist.
+
+```python
+# First time setup - creates tables and functions
+cache.setup()
+
+# Safe to run again - won't lose data
+cache.setup()
+
+# Force recreate - WILL DELETE ALL CACHE DATA
+cache.setup(force_recreate=True)
+```
+
+**Note:** 
+- With `auto_setup=True`, setup only runs if needed (checks with `is_setup()` first)
+- Functions use `CREATE OR REPLACE` (PostgreSQL standard) - very fast, no overhead
+- After initial setup, you can skip `setup()` entirely on subsequent connections
 
 #### set(key, value, ttl=None)
 
@@ -312,6 +375,22 @@ if count < 100:
 ```
 
 
+### Cache Persistence Example
+
+```python
+from fastpgcache import FastPgCache
+
+# Create cache and store data
+cache1 = FastPgCache("postgresql://user:pass@localhost/mydb", auto_setup=True)
+cache1.set("user:123", {"name": "Alice"})
+cache1.close()
+
+# Later... new connection, data still there!
+cache2 = FastPgCache("postgresql://user:pass@localhost/mydb")
+user = cache2.get("user:123")  # ✅ Works! Returns {"name": "Alice"}
+cache2.close()
+```
+
 ### Scheduled Cleanup with Cron
 
 ```python
@@ -339,9 +418,23 @@ Then schedule with crontab:
 
 ## Important Notes
 
+### Cache Persistence
+
+✅ **Cache data PERSISTS when:**
+- You close and reopen connections (`cache.close()` then create new `FastPgCache`)
+- You restart your application
+- Multiple applications connect to the same database
+
+❌ **Cache data is LOST when:**
+- PostgreSQL server crashes or restarts (UNLOGGED table behavior)
+- You call `cache.setup(force_recreate=True)`
+
+### Other Notes
+
 - **UNLOGGED Tables** - Data is not crash-safe (lost on database crash). For durability, modify the setup SQL to remove `UNLOGGED`.
-- **First Setup** - Run `cache.setup()` once to create tables and functions
+- **First Setup** - Run `cache.setup()` once to create tables and functions. Safe to run multiple times (won't lose data).
 - **Cleanup** - Schedule `cache.cleanup()` to remove expired entries (they're auto-removed on access, but cleanup helps with storage)
+- **auto_setup=True** - Safe to use! Creates tables if they don't exist, but won't drop existing cache data.
 
 
 **psycopg2 not found:**
