@@ -1,0 +1,54 @@
+[build-system]
+requires = ["setuptools>=45", "wheel", "setuptools-scm[toml]>=6.2"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fastpgcache"
+version = "0.1.0"
+description = "A fast Redis-like caching library using PostgreSQL with UNLOGGED tables for high performance"
+readme = "README.md"
+requires-python = ">=3.7"
+license = {text = "MIT"}
+authors = [
+    {name = "Wenwen Xie", email = "wenwen.xie@databricks.com"}
+]
+keywords = ["postgresql", "cache", "redis", "database", "caching", "fast", "performance"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Database",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dependencies = [
+    "psycopg2-binary>=2.9.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=3.0.0",
+    "black>=22.0.0",
+    "flake8>=4.0.0",
+]
+databricks = [
+    "databricks-sdk>=0.1.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/vivian-xie-db/fastpgcache"
+Documentation = "https://github.com/vivian-xie-db/fastpgcache#readme"
+Repository = "https://github.com/vivian-xie-db/fastpgcache.git"
+"Bug Tracker" = "https://github.com/vivian-xie-db/fastpgcache/issues"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["fastpgcache*"]
+exclude = ["tests*"]
+
