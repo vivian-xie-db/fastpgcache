@@ -1,3 +1,43 @@
+Metadata-Version: 2.4
+Name: fastpgcache
+Version: 0.1.0
+Summary: A fast Redis-like caching library using PostgreSQL with UNLOGGED tables for high performance
+Home-page: https://github.com/vivian-xie-db/fastpgcache
+Author: Wenwen Xie
+Author-email: Wenwen Xie <wenwen.xie@databricks.com>
+License: MIT
+Project-URL: Homepage, https://github.com/vivian-xie-db/fastpgcache
+Project-URL: Documentation, https://github.com/vivian-xie-db/fastpgcache#readme
+Project-URL: Repository, https://github.com/vivian-xie-db/fastpgcache.git
+Project-URL: Bug Tracker, https://github.com/vivian-xie-db/fastpgcache/issues
+Keywords: postgresql,cache,redis,database,caching,fast,performance
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Topic :: Database
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Requires-Python: >=3.7
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: psycopg2-binary>=2.9.0
+Provides-Extra: dev
+Requires-Dist: pytest>=7.0.0; extra == "dev"
+Requires-Dist: pytest-cov>=3.0.0; extra == "dev"
+Requires-Dist: black>=22.0.0; extra == "dev"
+Requires-Dist: flake8>=4.0.0; extra == "dev"
+Provides-Extra: databricks
+Requires-Dist: databricks-sdk>=0.1.0; extra == "databricks"
+Dynamic: author
+Dynamic: home-page
+Dynamic: license-file
+Dynamic: requires-python
+
 # FastPgCache 🐘⚡
 
 A **fast Redis-like caching library** for PostgreSQL with high performance using UNLOGGED tables. Get Redis-style caching without the extra infrastructure!
@@ -50,8 +90,7 @@ fastpgcache[databricks]>=0.1.0
 ```python
 from databricks.sdk import WorkspaceClient
 from fastpgcache import FastPgCache, DatabricksTokenProvider
-# If you use Databricks notebook or Databricks apps runtime, you don't need to add profile
-# w = WorkspaceClient()
+
 w = WorkspaceClient(profile="Oauth")
 
 # Create token provider with automatic rotation
@@ -314,9 +353,7 @@ pip install psycopg2-binary
 
 1. **Workspace Client Configuration:**
    ```python
-   # Ensure valid authentication. If you use Databricks notebook or Databricks apps runtime, you don't 
-   # need to add profile
-   # w = WorkspaceClient()
+   # Ensure valid authentication
    w = WorkspaceClient(profile="Oauth")
    # Test credential generation
    cred = w.database.generate_database_credential(
