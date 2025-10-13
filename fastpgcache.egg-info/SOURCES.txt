@@ -5,6 +5,8 @@ README.md
 pyproject.toml
 requirements.txt
 setup.py
+dist/fastpgcache-0.1.0-py3-none-any.whl
+dist/fastpgcache-0.1.0.tar.gz
 examples/databricks_token_example.py
 fastpgcache/__init__.py
 fastpgcache/client.py

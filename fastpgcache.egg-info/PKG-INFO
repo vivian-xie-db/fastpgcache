@@ -90,7 +90,8 @@ fastpgcache[databricks]>=0.1.0
 ```python
 from databricks.sdk import WorkspaceClient
 from fastpgcache import FastPgCache, DatabricksTokenProvider
-
+# If you use Databricks notebook or Databricks apps runtime, you don't need to add profile
+# w = WorkspaceClient()
 w = WorkspaceClient(profile="Oauth")
 
 # Create token provider with automatic rotation
@@ -353,7 +354,9 @@ pip install psycopg2-binary
 
 1. **Workspace Client Configuration:**
    ```python
-   # Ensure valid authentication
+   # Ensure valid authentication. If you use Databricks notebook or Databricks apps runtime, you don't 
+   # need to add profile
+   # w = WorkspaceClient()
    w = WorkspaceClient(profile="Oauth")
    # Test credential generation
    cred = w.database.generate_database_credential(
