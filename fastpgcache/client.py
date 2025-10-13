@@ -3,7 +3,7 @@ FastPgCache Client - Main interface for PostgreSQL caching
 """
 
 import psycopg2
-from psycopg2 import pool
+from psycopg2 import pool, sql
 from typing import Optional, Union
 import json
 from contextlib import contextmanager
@@ -38,6 +38,7 @@ class FastPgCache:
         user: str = "postgres",
         password: str = "",
         token_provider = None,
+        schema: str = "public",
         minconn: int = 1,
         maxconn: int = 10,
         auto_setup: bool = True
@@ -54,6 +55,7 @@ class FastPgCache:
             user: Database user (default: postgres)
             password: Database password (ignored if token_provider is set)
             token_provider: TokenProvider instance for automatic credential rotation
+            schema: PostgreSQL schema name for cache table (default: public)
             minconn: Minimum connections in pool (default: 1)
             maxconn: Maximum connections in pool (default: 10)
             auto_setup: Automatically run setup() on initialization if not already set up (default: True)
@@ -65,6 +67,7 @@ class FastPgCache:
         self.user = user
         self.password = password
         self.token_provider = token_provider
+        self.schema = schema
         self.minconn = minconn
         self.maxconn = maxconn
         self._pool_lock = threading.Lock()
@@ -143,16 +146,18 @@ class FastPgCache:
         Check if the cache system is already set up.
         
         Returns:
-            True if cache table exists, False otherwise
+            True if cache table exists in the specified schema, False otherwise
         """
         try:
             with self._get_connection() as conn:
                 with conn.cursor() as cursor:
-                    # Simple check - try to query the cache table
-                    cursor.execute("SELECT 1 FROM cache LIMIT 0")
-                    return True
+                    # Check if table exists in the specified schema
+                    cursor.execute(
+                        f"SELECT 1 FROM {self.schema}.cache"
+                    )
+                    return cursor.fetchone() is not None
         except psycopg2.Error:
-            # Table doesn't exist or other error
+            # Error checking for table
             return False
     
     def setup(self, force_recreate: bool = False) -> bool:
@@ -167,25 +172,35 @@ class FastPgCache:
         Returns:
             True if setup was successful
         """
+        with self._get_connection() as conn:
+            with conn.cursor() as cursor:
+                # Create schema if it doesn't exist
+                cursor.execute(
+                    sql.SQL("CREATE SCHEMA IF NOT EXISTS {}").format(
+                        sql.Identifier(self.schema)
+                    )
+                )
+                conn.commit()
+        
         if force_recreate:
-            drop_sql = """
+            drop_sql = f"""
 -- Drop existing objects if they exist
-DROP TABLE IF EXISTS cache CASCADE;
-DROP FUNCTION IF EXISTS cache_set(TEXT, TEXT, INTEGER);
-DROP FUNCTION IF EXISTS cache_get(TEXT);
-DROP FUNCTION IF EXISTS cache_delete(TEXT);
-DROP FUNCTION IF EXISTS cache_exists(TEXT);
-DROP FUNCTION IF EXISTS cache_cleanup();
-DROP FUNCTION IF EXISTS cache_ttl(TEXT);
+DROP TABLE IF EXISTS {self.schema}.cache CASCADE;
+DROP FUNCTION IF EXISTS {self.schema}.cache_set(TEXT, TEXT, INTEGER);
+DROP FUNCTION IF EXISTS {self.schema}.cache_get(TEXT);
+DROP FUNCTION IF EXISTS {self.schema}.cache_delete(TEXT);
+DROP FUNCTION IF EXISTS {self.schema}.cache_exists(TEXT);
+DROP FUNCTION IF EXISTS {self.schema}.cache_cleanup();
+DROP FUNCTION IF EXISTS {self.schema}.cache_ttl(TEXT);
 """
             with self._get_connection() as conn:
                 with conn.cursor() as cursor:
                     cursor.execute(drop_sql)
                     conn.commit()
         
-        setup_sql = """
+        setup_sql = f"""
 -- Create UNLOGGED table for caching (only if not exists)
-CREATE UNLOGGED TABLE IF NOT EXISTS cache (
+CREATE UNLOGGED TABLE IF NOT EXISTS {self.schema}.cache (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL,
     expires_at TIMESTAMP WITH TIME ZONE,
@@ -194,11 +209,11 @@ CREATE UNLOGGED TABLE IF NOT EXISTS cache (
 );
 
 -- Create index for expiry cleanup (only if not exists)
-CREATE INDEX IF NOT EXISTS idx_cache_expires_at ON cache(expires_at) 
+CREATE INDEX IF NOT EXISTS idx_cache_expires_at ON {self.schema}.cache(expires_at) 
 WHERE expires_at IS NOT NULL;
 
 -- Function: SET a cache value with optional TTL
-CREATE OR REPLACE FUNCTION cache_set(
+CREATE OR REPLACE FUNCTION {self.schema}.cache_set(
     p_key TEXT,
     p_value TEXT,
     p_ttl_seconds INTEGER DEFAULT NULL
@@ -213,7 +228,7 @@ BEGIN
         v_expires_at := NULL;
     END IF;
     
-    INSERT INTO cache (key, value, expires_at, created_at, accessed_at)
+    INSERT INTO {self.schema}.cache (key, value, expires_at, created_at, accessed_at)
     VALUES (p_key, p_value, v_expires_at, NOW(), NOW())
     ON CONFLICT (key) 
     DO UPDATE SET
@@ -226,7 +241,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Function: GET a cache value
-CREATE OR REPLACE FUNCTION cache_get(p_key TEXT)
+CREATE OR REPLACE FUNCTION {self.schema}.cache_get(p_key TEXT)
 RETURNS TEXT AS $$
 DECLARE
     v_value TEXT;
@@ -234,7 +249,7 @@ DECLARE
 BEGIN
     SELECT value, expires_at 
     INTO v_value, v_expires_at
-    FROM cache
+    FROM {self.schema}.cache
     WHERE key = p_key;
     
     IF NOT FOUND THEN
@@ -242,36 +257,36 @@ BEGIN
     END IF;
     
     IF v_expires_at IS NOT NULL AND v_expires_at < NOW() THEN
-        DELETE FROM cache WHERE key = p_key;
+        DELETE FROM {self.schema}.cache WHERE key = p_key;
         RETURN NULL;
     END IF;
     
-    UPDATE cache SET accessed_at = NOW() WHERE key = p_key;
+    UPDATE {self.schema}.cache SET accessed_at = NOW() WHERE key = p_key;
     
     RETURN v_value;
 END;
 $$ LANGUAGE plpgsql;
 
 -- Function: DELETE a cache entry
-CREATE OR REPLACE FUNCTION cache_delete(p_key TEXT)
+CREATE OR REPLACE FUNCTION {self.schema}.cache_delete(p_key TEXT)
 RETURNS BOOLEAN AS $$
 DECLARE
     v_deleted INTEGER;
 BEGIN
-    DELETE FROM cache WHERE key = p_key;
+    DELETE FROM {self.schema}.cache WHERE key = p_key;
     GET DIAGNOSTICS v_deleted = ROW_COUNT;
     RETURN v_deleted > 0;
 END;
 $$ LANGUAGE plpgsql;
 
 -- Function: CHECK if a key exists
-CREATE OR REPLACE FUNCTION cache_exists(p_key TEXT)
+CREATE OR REPLACE FUNCTION {self.schema}.cache_exists(p_key TEXT)
 RETURNS BOOLEAN AS $$
 DECLARE
     v_expires_at TIMESTAMP WITH TIME ZONE;
 BEGIN
     SELECT expires_at INTO v_expires_at
-    FROM cache
+    FROM {self.schema}.cache
     WHERE key = p_key;
     
     IF NOT FOUND THEN
@@ -279,7 +294,7 @@ BEGIN
     END IF;
     
     IF v_expires_at IS NOT NULL AND v_expires_at < NOW() THEN
-        DELETE FROM cache WHERE key = p_key;
+        DELETE FROM {self.schema}.cache WHERE key = p_key;
         RETURN FALSE;
     END IF;
     
@@ -288,14 +303,14 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Function: GET TTL
-CREATE OR REPLACE FUNCTION cache_ttl(p_key TEXT)
+CREATE OR REPLACE FUNCTION {self.schema}.cache_ttl(p_key TEXT)
 RETURNS INTEGER AS $$
 DECLARE
     v_expires_at TIMESTAMP WITH TIME ZONE;
     v_ttl_seconds INTEGER;
 BEGIN
     SELECT expires_at INTO v_expires_at
-    FROM cache
+    FROM {self.schema}.cache
     WHERE key = p_key;
     
     IF NOT FOUND THEN
@@ -309,7 +324,7 @@ BEGIN
     v_ttl_seconds := EXTRACT(EPOCH FROM (v_expires_at - NOW()))::INTEGER;
     
     IF v_ttl_seconds <= 0 THEN
-        DELETE FROM cache WHERE key = p_key;
+        DELETE FROM {self.schema}.cache WHERE key = p_key;
         RETURN -2;
     END IF;
     
@@ -318,12 +333,12 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Function: CLEANUP expired entries
-CREATE OR REPLACE FUNCTION cache_cleanup()
+CREATE OR REPLACE FUNCTION {self.schema}.cache_cleanup()
 RETURNS INTEGER AS $$
 DECLARE
     v_deleted INTEGER;
 BEGIN
-    DELETE FROM cache 
+    DELETE FROM {self.schema}.cache 
     WHERE expires_at IS NOT NULL 
     AND expires_at < NOW();
     
@@ -333,7 +348,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Create view for valid cache entries
-CREATE OR REPLACE VIEW valid_cache AS
+CREATE OR REPLACE VIEW {self.schema}.valid_cache AS
 SELECT 
     key,
     value,
@@ -344,7 +359,7 @@ SELECT
         WHEN expires_at IS NULL THEN -1
         ELSE EXTRACT(EPOCH FROM (expires_at - NOW()))::INTEGER
     END as ttl_seconds
-FROM cache
+FROM {self.schema}.cache
 WHERE expires_at IS NULL OR expires_at > NOW();
 """
         
@@ -383,7 +398,7 @@ WHERE expires_at IS NULL OR expires_at > NOW();
         with self._get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
-                    "SELECT cache_set(%s, %s, %s)",
+                    f"SELECT {self.schema}.cache_set(%s, %s, %s)",
                     (key, value, ttl)
                 )
                 result = cursor.fetchone()[0]
@@ -413,7 +428,7 @@ WHERE expires_at IS NULL OR expires_at > NOW();
         """
         with self._get_connection() as conn:
             with conn.cursor() as cursor:
-                cursor.execute("SELECT cache_get(%s)", (key,))
+                cursor.execute(f"SELECT {self.schema}.cache_get(%s)", (key,))
                 result = cursor.fetchone()
                 
                 if result is None or result[0] is None:
@@ -446,7 +461,7 @@ WHERE expires_at IS NULL OR expires_at > NOW();
         """
         with self._get_connection() as conn:
             with conn.cursor() as cursor:
-                cursor.execute("SELECT cache_delete(%s)", (key,))
+                cursor.execute(f"SELECT {self.schema}.cache_delete(%s)", (key,))
                 result = cursor.fetchone()[0]
                 conn.commit()
                 return result
@@ -467,7 +482,7 @@ WHERE expires_at IS NULL OR expires_at > NOW();
         """
         with self._get_connection() as conn:
             with conn.cursor() as cursor:
-                cursor.execute("SELECT cache_exists(%s)", (key,))
+                cursor.execute(f"SELECT {self.schema}.cache_exists(%s)", (key,))
                 result = cursor.fetchone()[0]
                 return result
     
@@ -487,7 +502,7 @@ WHERE expires_at IS NULL OR expires_at > NOW();
         """
         with self._get_connection() as conn:
             with conn.cursor() as cursor:
-                cursor.execute("SELECT cache_ttl(%s)", (key,))
+                cursor.execute(f"SELECT {self.schema}.cache_ttl(%s)", (key,))
                 result = cursor.fetchone()[0]
                 return result
     
@@ -504,7 +519,7 @@ WHERE expires_at IS NULL OR expires_at > NOW();
         """
         with self._get_connection() as conn:
             with conn.cursor() as cursor:
-                cursor.execute("SELECT cache_cleanup()")
+                cursor.execute(f"SELECT {self.schema}.cache_cleanup()")
                 result = cursor.fetchone()[0]
                 conn.commit()
                 return result

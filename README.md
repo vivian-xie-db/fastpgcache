@@ -105,6 +105,7 @@ cache = FastPgCache(
     database="databricks_postgres",
     user="user@databricks.com",
     token_provider=token_provider,  # Automatic token management!
+    schema="public",  # Specify the schema for the cache table
     auto_setup=True
 )
 
@@ -185,6 +186,7 @@ Initialize the cache client.
 - `user` (str): Database user (default: 'postgres')
 - `password` (str): Database password (ignored if token_provider is set)
 - `token_provider` (TokenProvider, optional): Token provider for automatic credential rotation
+- `schema` (str): PostgreSQL schema name for cache table (default: 'public')
 - `minconn` (int): Minimum connections in pool (default: 1)
 - `maxconn` (int): Maximum connections in pool (default: 10)
 - `auto_setup` (bool): Automatically run setup() if not already set up (default: True)

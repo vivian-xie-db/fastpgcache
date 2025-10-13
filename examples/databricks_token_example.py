@@ -30,6 +30,7 @@ cache = FastPgCache(
     database=dbname,
     user=user,
     token_provider=token_provider,  # Use token provider instead of static password
+    schema="public",  # Specify the schema for the cache table
     auto_setup=True
 )
 
