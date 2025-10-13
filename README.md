@@ -269,62 +269,6 @@ if count < 100:
     cache.set(f"ratelimit:{user_id}", count + 1, ttl=3600)
 ```
 
-### More Examples
-
-See the `examples/` directory for complete examples:
-- `basic_usage.py` - Basic cache operations
-- `databricks_token_example.py` - Complete Databricks token usage
-- `connection_string.py` - Using connection strings
-- `context_manager.py` - Context manager usage
-- `advanced_usage.py` - Advanced patterns
-
-## Advanced Usage
-
-### Full Example with All Features
-
-```python
-from fastpgcache import FastPgCache
-import time
-
-# Initialize with auto-setup
-cache = FastPgCache(
-    "postgresql://user:password@localhost/mydb",
-    auto_setup=True
-)
-
-# Store session data with 30 minute expiry
-cache.set(
-    "session:abc123",
-    {
-        "user_id": 123,
-        "ip": "192.168.1.1",
-        "logged_in_at": "2025-10-12T17:00:00Z"
-    },
-    ttl=1800
-)
-
-# Store API response with 5 minute cache
-cache.set(
-    "api:weather:NYC",
-    {"temp": 72, "conditions": "sunny"},
-    ttl=300
-)
-
-# Store configuration without expiry
-cache.set("config:app", {"theme": "dark", "language": "en"})
-
-# Retrieve values
-session = cache.get("session:abc123")
-weather = cache.get("api:weather:NYC")
-config = cache.get("config:app")
-
-# Check TTL
-print(f"Session expires in: {cache.ttl('session:abc123')} seconds")
-print(f"Config TTL: {cache.ttl('config:app')}")  # Returns -1 (no expiry)
-
-# Clean up when done
-cache.close()
-```
 
 ### Scheduled Cleanup with Cron
 
