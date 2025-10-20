@@ -11,13 +11,53 @@ A **fast Redis-like caching library** for PostgreSQL with high performance using
 - **💪 ACID** - Get caching within PostgreSQL transactions
 - **📦 JSON Support** - Automatic JSON serialization/deserialization
 - **🔐 Token Rotation** - Built-in support for Databricks token authentication
+- **🔒 User Isolation** - Automatic per-user cache isolation (no race conditions!)
 
+## 🔒 User Isolation (Important!)
+
+**By default, each user gets isolated cache** - all users share the same table, but rows are filtered by `user_id`:
+
+```python
+# All users share public.cache table
+cache_alice = FastPgCache(user="alice@company.com")
+cache_bob = FastPgCache(user="bob@company.com")
+
+# Same key name, different values - no collision!
+cache_alice.set("session", "alice_value")
+cache_bob.set("session", "bob_value")
+
+# Each user only sees their own data
+cache_alice.get("session")  # Returns: "alice_value"
+cache_bob.get("session")    # Returns: "bob_value"
+```
+
+**How it works:**
+```sql
+-- Table structure
+CREATE TABLE public.cache (
+    user_id TEXT NOT NULL,
+    key TEXT NOT NULL,
+    value TEXT NOT NULL,
+    ...
+    PRIMARY KEY (user_id, key)
+);
+
+-- Alice's data: WHERE user_id = 'alice@company.com'
+-- Bob's data:   WHERE user_id = 'bob@company.com'
+```
+
+**Benefits:**
+- ✅ Simple (one table for everyone)
+- ✅ Fast (indexed lookups on user_id + key)
+- ✅ No race conditions (composite primary key)
+- ✅ No data interference (automatic row filtering)
+- ✅ Scales to millions of users
+
+See `row_isolation_example.py` for details.
 
 ## Quick Start
 
 ### Installation
-
-### Basic Installation
 
 ```bash
 pip install fastpgcache
@@ -37,47 +77,87 @@ pip install -e .
 pip install fastpgcache[databricks]
 ```
 
-Or add to your `requirements.txt`:
-```
-fastpgcache[databricks]>=0.1.0
+## Usage (Redis-Like Pattern)
+
+> **Important:** Like Redis, there are two distinct roles:
+> - **Admin/DBA:** Sets up cache once (like starting Redis server)
+> - **Regular Users:** Just connect and use (like Redis clients)
+
+### Step 1: Admin Setup (⚠️ Admin/DBA Only - Once)
+
+**Admin/DBA runs this ONCE to create the cache table:**
+
+```bash
+# Local PostgreSQL (requires password)
+python admin_setup_cache.py --host localhost --user postgres --password mypass
+
+# With custom schema
+python admin_setup_cache.py --host myhost --user admin --password mypass --schema my_cache
+
+# Databricks (NO password needed - token provider handles authentication)
+python admin_setup_cache.py \
+  --databricks \
+  --host myhost.cloud.databricks.com \
+  --database databricks_postgres \
+  --user admin@company.com \
+  --instance-name my_instance \
+  --profile Oauth
+
+# CI/CD (non-interactive mode)
+python admin_setup_cache.py --host myhost --user admin --password $DB_PASS --force
 ```
 
-## Usage Patterns
+**This is NOT for regular users! Only admin/DBA/DevOps.**
 
-### One-Time Setup (Recommended for Production)
+> **Note:** The `admin_setup_cache.py` script handles all setup internally. You don't need to write any code - just run the script with appropriate credentials.
+
+The script supports these options:
+- `--host`: Database host (default: localhost)
+- `--database`: Database name (default: postgres)
+- `--user`: Admin user with CREATE TABLE permissions
+- `--password`: Database password (**ONLY for local PostgreSQL, omit for Databricks**)
+- `--schema`: Schema for cache table (default: public)
+- `--force`: Force recreate without prompts (for CI/CD)
+- `--databricks`: Use Databricks token authentication (no password needed)
+- `--instance-name`: Databricks instance name (required with `--databricks`)
+- `--profile`: Databricks auth profile (default: Oauth)
+
+**When to use `--password`:**
+- ✅ Local PostgreSQL: `--password mypass`
+- ❌ Databricks: Don't use `--password` (token provider handles it)
+
+### Step 2: Users Connect and Use (✅ Regular Users)
+
+**Users just connect - NO setup() calls needed:**
 
 ```python
 from fastpgcache import FastPgCache
 
-# FIRST TIME ONLY - Run once per database (e.g., deployment script)
-cache = FastPgCache("postgresql://user:pass@localhost/mydb")
-cache.setup()  # Creates tables and functions
-cache.close()
+# Just connect - like Redis!
+cache = FastPgCache(
+    host="your-host",
+    database="your-db",
+    user="alice@company.com",
+    password="user-password"
+)
+
+# Use immediately - no setup needed!
+cache.set("session", {"user": "Alice"}, ttl=3600)
+user_data = cache.get("session")
+
+# Each user's data is automatically isolated
 ```
 
-Then in your application:
-```python
-# All subsequent uses - NO setup() needed!
-cache = FastPgCache("postgresql://user:pass@localhost/mydb")
-cache.set("key", "value")  # Ready to use immediately
-```
+### Redis Comparison
 
-### Auto-Setup (Convenient for Development)
+| Redis | FastPgCache |
+|-------|-------------|
+| `$ redis-server` | Admin runs `cache.setup()` once |
+| `r = redis.Redis(...)` | `cache = FastPgCache(...)` |
+| `r.set('key', 'value')` | `cache.set('key', 'value')` |
+| `r.get('key')` | `cache.get('key')` |
 
-```python
-# Now intelligent - only runs setup if needed
-cache = FastPgCache("postgresql://user:pass@localhost/mydb", auto_setup=True)
-cache.set("key", "value")  # Ready to use immediately
-```
-
-### Conditional Setup (Full Control)
-
-```python
-cache = FastPgCache("postgresql://user:pass@localhost/mydb")
-if not cache.is_setup():
-    cache.setup()
-# Use cache...
-```
+**Key Point:** Like Redis, users don't run setup - they just connect and use!
 
 ## Databricks Token Authentication
 
