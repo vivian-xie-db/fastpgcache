@@ -47,6 +47,9 @@ Documentation = "https://github.com/vivian-xie-db/fastpgcache#readme"
 Repository = "https://github.com/vivian-xie-db/fastpgcache.git"
 "Bug Tracker" = "https://github.com/vivian-xie-db/fastpgcache/issues"
 
+[project.scripts]
+fastpgcache-admin = "fastpgcache.admin:main"
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["fastpgcache*"]

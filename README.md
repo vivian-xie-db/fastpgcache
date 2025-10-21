@@ -112,15 +112,17 @@ pip install fastpgcache[databricks]
 
 **Admin/DBA runs this ONCE to create the UNLOGGED cache table:**
 
+After `pip install fastpgcache`, the admin command is automatically available:
+
 ```bash
-# Local PostgreSQL (requires password)
-python admin_setup_cache.py --host localhost --user postgres --password mypass
+# Local PostgreSQL
+fastpgcache-admin --host localhost --user postgres --password mypass
 
 # With custom schema
-python admin_setup_cache.py --host myhost --user admin --password mypass --schema my_cache
+fastpgcache-admin --host myhost --user admin --password mypass --schema my_cache
 
 # Databricks (NO password needed - token provider handles authentication)
-python admin_setup_cache.py \
+fastpgcache-admin \
   --databricks \
   --host myhost.cloud.databricks.com \
   --database databricks_postgres \
@@ -128,13 +130,18 @@ python admin_setup_cache.py \
   --instance-name my_instance \
   --profile Oauth
 
-# CI/CD (non-interactive mode)
-python admin_setup_cache.py --host myhost --user admin --password $DB_PASS --force
+# CI/CD with force recreate (no prompts)
+fastpgcache-admin --host myhost --user admin --password $DB_PASS --force
+```
+
+**Alternative:** Run the Python script directly:
+```bash
+python -m fastpgcache.admin --host localhost --user postgres --password mypass
 ```
 
 **This is NOT for regular users! Only admin/DBA/DevOps.**
 
-> **Note:** The `admin_setup_cache.py` script creates UNLOGGED tables automatically for optimal performance. You don't need to write any code - just run the script with appropriate credentials.
+> **Note:** The `fastpgcache-admin` command creates UNLOGGED tables automatically for optimal performance. You don't need to write any code - just run the command with appropriate credentials.
 
 The script supports these options:
 - `--host`: Database host (default: localhost)

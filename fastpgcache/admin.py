@@ -370,7 +370,8 @@ def setup_cache(
             conn.close()
 
 
-if __name__ == "__main__":
+def run_admin_setup():
+    """Run admin setup with command-line argument parsing"""
     import argparse
     
     parser = argparse.ArgumentParser(
@@ -461,4 +462,13 @@ Examples:
     print("\n" + "=" * 70)
     print("Setup complete! Users can now use the cache.")
     print("=" * 70)
+
+
+def main():
+    """Entry point for console script"""
+    run_admin_setup()
+
+
+if __name__ == "__main__":
+    main()
 
