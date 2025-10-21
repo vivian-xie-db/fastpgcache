@@ -1,0 +1,13 @@
+LICENSE
+MANIFEST.in
+README.md
+admin_setup_cache.py
+pyproject.toml
+fastpgcache/__init__.py
+fastpgcache/client.py
+fastpgcache/token_provider.py
+fastpgcache.egg-info/PKG-INFO
+fastpgcache.egg-info/SOURCES.txt
+fastpgcache.egg-info/dependency_links.txt
+fastpgcache.egg-info/requires.txt
+fastpgcache.egg-info/top_level.txt
