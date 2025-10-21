@@ -392,7 +392,6 @@ Examples:
     --database databricks_postgres \\
     --user admin@company.com \\
     --instance-name my_instance \\
-    --profile Oauth
   
   # CI/CD with force recreate
   python admin_setup_cache.py --host myhost --user admin --password $DB_PASS --force
@@ -411,7 +410,6 @@ Examples:
     # Databricks-specific arguments
     parser.add_argument("--databricks", action="store_true", help="Use Databricks token provider (handles auth automatically)")
     parser.add_argument("--instance-name", help="Databricks instance name (required with --databricks)")
-    parser.add_argument("--profile", default="Oauth", help="Databricks auth profile (default: Oauth)")
     
     args = parser.parse_args()
     
@@ -426,8 +424,7 @@ Examples:
                 print("ERROR: --instance-name required when using --databricks")
                 sys.exit(1)
             
-            print(f"Setting up Databricks token provider (profile: {args.profile})...")
-            w = WorkspaceClient(profile=args.profile)
+            w = WorkspaceClient()
             token_provider = DatabricksTokenProvider(
                 workspace_client=w,
                 instance_names=[args.instance_name],

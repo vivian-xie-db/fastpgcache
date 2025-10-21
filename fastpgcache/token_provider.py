@@ -30,7 +30,7 @@ class DatabricksTokenProvider(TokenProvider):
     
     Example:
         >>> from databricks.sdk import WorkspaceClient
-        >>> w = WorkspaceClient(profile="Oauth")
+        >>> w = WorkspaceClient()
         >>> provider = DatabricksTokenProvider(
         ...     workspace_client=w,
         ...     instance_names=["my_instance"],

@@ -1,3 +1,38 @@
+Metadata-Version: 2.4
+Name: fastpgcache
+Version: 0.1.4
+Summary: A fast Redis-like caching library using PostgreSQL with UNLOGGED tables for high performance
+Author-email: Wenwen Xie <wenwen.xie@databricks.com>
+License: MIT
+Project-URL: Homepage, https://github.com/vivian-xie-db/fastpgcache
+Project-URL: Documentation, https://github.com/vivian-xie-db/fastpgcache#readme
+Project-URL: Repository, https://github.com/vivian-xie-db/fastpgcache.git
+Project-URL: Bug Tracker, https://github.com/vivian-xie-db/fastpgcache/issues
+Keywords: postgresql,cache,redis,database,caching,fast,performance
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Topic :: Database
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Requires-Python: >=3.7
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: psycopg2-binary>=2.9.0
+Provides-Extra: dev
+Requires-Dist: pytest>=7.0.0; extra == "dev"
+Requires-Dist: pytest-cov>=3.0.0; extra == "dev"
+Requires-Dist: black>=22.0.0; extra == "dev"
+Requires-Dist: flake8>=4.0.0; extra == "dev"
+Provides-Extra: databricks
+Requires-Dist: databricks-sdk>=0.1.0; extra == "databricks"
+Dynamic: license-file
+
 # FastPgCache 🐘⚡
 
 A **fast Redis-like caching library** for PostgreSQL with high performance using UNLOGGED tables. Get Redis-style caching without the extra infrastructure!
@@ -110,9 +145,7 @@ pip install fastpgcache[databricks]
 
 ### Step 1: Admin Setup (⚠️ Admin/DBA Only - Once)
 
-**Admin/DBA runs this ONCE to create the UNLOGGED cache table.**
-
-#### Option A: Command Line (Quick)
+**Admin/DBA runs this ONCE to create the UNLOGGED cache table:**
 
 After `pip install fastpgcache`, the admin command is automatically available:
 
@@ -136,46 +169,9 @@ fastpgcache-admin \
 fastpgcache-admin --host myhost --user admin --password $DB_PASS --force
 ```
 
-#### Option B: Python Code (Programmatic)
-
-```python
-from fastpgcache import setup_cache
-
-# Local PostgreSQL
-setup_cache(
-    host="localhost",
-    database="postgres",
-    user="postgres",
-    password="mypassword"
-)
-
-# Custom schema
-setup_cache(
-    host="myhost",
-    database="mydb",
-    user="admin",
-    password="mypass",
-    schema="my_cache"
-)
-
-# Databricks with token provider
-from databricks.sdk import WorkspaceClient
-from fastpgcache import DatabricksTokenProvider
-
-w = WorkspaceClient()
-token_provider = DatabricksTokenProvider(
-    workspace_client=w,
-    instance_names=["my_instance"],
-    refresh_interval=3600,
-    auto_refresh=True
-)
-
-setup_cache(
-    host="myhost.cloud.databricks.com",
-    database="databricks_postgres",
-    user="admin@company.com",
-    token_provider=token_provider
-)
+**Alternative:** Run the Python script directly:
+```bash
+python -m fastpgcache.admin --host localhost --user postgres --password mypass
 ```
 
 **This is NOT for regular users! Only admin/DBA/DevOps.**

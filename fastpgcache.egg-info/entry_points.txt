@@ -1,0 +1,2 @@
+[console_scripts]
+fastpgcache-admin = fastpgcache.admin:main
