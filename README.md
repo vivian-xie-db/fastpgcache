@@ -124,13 +124,23 @@ fastpgcache-admin --host localhost --user postgres --password mypass
 fastpgcache-admin --host myhost --user admin --password mypass --schema my_cache
 
 # Databricks (NO password needed - token provider handles authentication)
+
+# Local IDE development (with profile)
 fastpgcache-admin \
   --databricks \
   --host myhost.cloud.databricks.com \
   --database databricks_postgres \
   --user admin@company.com \
   --instance-name my_instance \
-  --profile Oauth
+  --profile DEFAULT
+
+# Online notebook mode (no profile needed)
+fastpgcache-admin \
+  --databricks \
+  --host myhost.cloud.databricks.com \
+  --database databricks_postgres \
+  --user admin@company.com \
+  --instance-name my_instance
 
 # CI/CD with force recreate (no prompts)
 fastpgcache-admin --host myhost --user admin --password $DB_PASS --force
@@ -162,6 +172,16 @@ setup_cache(
 from databricks.sdk import WorkspaceClient
 from fastpgcache import DatabricksTokenProvider
 
+# Local IDE development (with profile)
+w = WorkspaceClient(profile="DEFAULT")
+token_provider = DatabricksTokenProvider(
+    workspace_client=w,
+    instance_names=["my_instance"],
+    refresh_interval=3600,
+    auto_refresh=True
+)
+
+# OR for online notebook mode (no profile needed)
 w = WorkspaceClient()
 token_provider = DatabricksTokenProvider(
     workspace_client=w,
@@ -191,7 +211,11 @@ The script supports these options:
 - `--force`: Force recreate without prompts (for CI/CD)
 - `--databricks`: Use Databricks token authentication (no password needed)
 - `--instance-name`: Databricks instance name (required with `--databricks`)
-- `--profile`: Databricks auth profile (default: Oauth)
+- `--profile`: Databricks auth profile (**ONLY for local IDE, omit for online notebooks**)
+
+**Profile usage:**
+- ✅ **Local IDE:** Use `--profile DEFAULT` (or your configured profile name)
+- ❌ **Online Notebook:** Omit `--profile` (uses runtime credentials automatically)
 
 **When to use `--password`:**
 - ✅ Local PostgreSQL: `--password mypass`
@@ -228,9 +252,11 @@ user_data = cache.get("session")
 from databricks.sdk import WorkspaceClient
 from fastpgcache import FastPgCache, DatabricksTokenProvider
 
-# If you use Databricks notebook or Databricks apps runtime, you don't need to add profile
+# Local IDE development (with profile)
+w = WorkspaceClient(profile="DEFAULT")
+
+# OR for online notebook mode (no profile needed)
 # w = WorkspaceClient()
-w = WorkspaceClient()
 
 # Create token provider with automatic rotation
 token_provider = DatabricksTokenProvider(
@@ -474,10 +500,12 @@ pip install psycopg2-binary
 
 1. **Workspace Client Configuration:**
    ```python
-   # Ensure valid authentication. If you use Databricks notebook or Databricks apps runtime, you don't 
-   # need to add profile
+   # Local IDE development (with profile)
+   w = WorkspaceClient(profile="DEFAULT")
+   
+   # OR online notebook mode (no profile needed)
    # w = WorkspaceClient()
-   w = WorkspaceClient()
+   
    # Test credential generation
    cred = w.database.generate_database_credential(
        request_id=str(uuid.uuid4()),

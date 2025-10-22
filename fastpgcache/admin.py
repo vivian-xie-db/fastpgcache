@@ -385,13 +385,22 @@ Examples:
   # Setup with custom schema
   python admin_setup_cache.py --host myhost --user admin --password mypass --schema my_cache
   
-  # Databricks (NO password needed - token provider handles it)
+  # Databricks - Local IDE development (with profile)
   python admin_setup_cache.py \\
     --databricks \\
     --host myhost.cloud.databricks.com \\
     --database databricks_postgres \\
     --user admin@company.com \\
     --instance-name my_instance \\
+    --profile DEFAULT
+  
+  # Databricks - Online notebook mode (no profile needed)
+  python admin_setup_cache.py \\
+    --databricks \\
+    --host myhost.cloud.databricks.com \\
+    --database databricks_postgres \\
+    --user admin@company.com \\
+    --instance-name my_instance
   
   # CI/CD with force recreate
   python admin_setup_cache.py --host myhost --user admin --password $DB_PASS --force
@@ -410,6 +419,7 @@ Examples:
     # Databricks-specific arguments
     parser.add_argument("--databricks", action="store_true", help="Use Databricks token provider (handles auth automatically)")
     parser.add_argument("--instance-name", help="Databricks instance name (required with --databricks)")
+    parser.add_argument("--profile", default=None, help="Databricks auth profile (for local IDE development). Omit for online notebook mode.")
     
     args = parser.parse_args()
     
@@ -424,7 +434,14 @@ Examples:
                 print("ERROR: --instance-name required when using --databricks")
                 sys.exit(1)
             
-            w = WorkspaceClient()
+            # Use profile if provided (local IDE), otherwise use default (online notebook)
+            if args.profile:
+                print(f"Using Databricks profile: {args.profile} (local IDE mode)")
+                w = WorkspaceClient(profile=args.profile)
+            else:
+                print("Using default Databricks credentials (online notebook mode)")
+                w = WorkspaceClient()
+            
             token_provider = DatabricksTokenProvider(
                 workspace_client=w,
                 instance_names=[args.instance_name],
