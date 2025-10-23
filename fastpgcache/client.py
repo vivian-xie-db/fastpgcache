@@ -7,7 +7,7 @@ from typing import Optional, Union
 import json
 from contextlib import contextmanager
 import threading
-
+from .cuckoo_filter import CuckooFilter
 
 class FastPgCache:
     """
@@ -75,6 +75,8 @@ class FastPgCache:
         self.password = password
         self.token_provider = token_provider
         self.schema = schema
+
+        self.cuckoo_filter = CuckooFilter()
         
         # Row-level isolation: same table, filtered by user_id
         self.table_name = "cache"
@@ -183,6 +185,7 @@ class FastPgCache:
                 )
                 result = cursor.fetchone()[0]
                 conn.commit()
+                self.cuckoo_filter.insert(f'{key}:{self.userid}')
                 return result
     
     def get(
@@ -206,6 +209,10 @@ class FastPgCache:
             >>> cache.get("user:123", parse_json=False)
             '{"name": "Alice"}'
         """
+
+        if self.cuckoo_filter.lookup(f'{key}:{self.user_id}') == False:
+            return None 
+
         with self._get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(f"SELECT {self.schema}.cache_get(%s, %s)", (self.user_id, key))
@@ -244,6 +251,7 @@ class FastPgCache:
                 cursor.execute(f"SELECT {self.schema}.cache_delete(%s, %s)", (self.user_id, key))
                 result = cursor.fetchone()[0]
                 conn.commit()
+                self.cuckoo_filter.delete(f'{key}:{self.user_id}')
                 return result
     
     def exists(self, key: str) -> bool:
@@ -260,6 +268,10 @@ class FastPgCache:
             >>> cache.exists("user:123")
             True
         """
+
+        if self.cuckoo_filter.lookup(f'{key}:{self.user_id}') == False:
+            return None 
+
         with self._get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(f"SELECT {self.schema}.cache_exists(%s, %s)", (self.user_id, key))
