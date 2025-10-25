@@ -44,20 +44,6 @@ Learn more: [PostgreSQL UNLOGGED Tables](https://www.postgresql.org/docs/current
 
 **By default, each user gets isolated cache** - all users share the same table, but rows are filtered by `user_id`:
 
-```python
-# All users share public.cache table
-cache_alice = FastPgCache(user="alice@company.com")
-cache_bob = FastPgCache(user="bob@company.com")
-
-# Same key name, different values - no collision!
-cache_alice.set("session", "alice_value")
-cache_bob.set("session", "bob_value")
-
-# Each user only sees their own data
-cache_alice.get("session")  # Returns: "alice_value"
-cache_bob.get("session")    # Returns: "bob_value"
-```
-
 **How it works:**
 ```sql
 -- Table structure (UNLOGGED for performance!)
@@ -108,9 +94,14 @@ pip install fastpgcache[databricks]
 > - **Admin/DBA:** Sets up cache once (like starting Redis server)
 > - **Regular Users:** Just connect and use (like Redis clients)
 
-### Step 1: Admin Setup (⚠️ Admin/DBA Only - Once)
+### Step 1: Admin Setup (Admin/DBA Only - Once)
 
 **Admin/DBA runs this ONCE to create the UNLOGGED cache table.**
+
+⚠️ Admins must be databricks users who are added with PostgresSQL roles and have databricks_superuser privileges.
+
+![](assets/admin1.png)
+![](assets/admin2.png)
 
 #### Option A: Command Line (Quick)
 
