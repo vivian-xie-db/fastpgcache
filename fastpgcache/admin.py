@@ -15,7 +15,7 @@ WHO SHOULD RUN THIS:
     ✗ NOT regular application users!
 
 USAGE:
-    python admin_setup_cache.py
+    python admin.py
 
 WHAT IT DOES:
     - Creates cache table: public.cache
@@ -33,6 +33,9 @@ AFTER RUNNING THIS:
 import psycopg2
 from psycopg2 import sql
 import sys
+from databricks.sdk import WorkspaceClient
+from fastpgcache import DatabricksTokenProvider
+import argparse
 
 
 def check_cache_setup(conn, schema: str) -> bool:
@@ -46,7 +49,6 @@ def check_cache_setup(conn, schema: str) -> bool:
     Returns:
         True if cache table and functions exist
     """
-    print(f"Checking if cache table and functions are already set up in schema: {schema}")
     try:
         with conn.cursor() as cursor:
             # Check if table exists
@@ -96,22 +98,32 @@ def create_cache_infrastructure(conn, schema: str, force_recreate: bool = False)
         
         # If force_recreate, drop everything first
         if force_recreate:
-            drop_sql = f"""
--- Drop existing objects if they exist
-DROP TABLE IF EXISTS {schema}.cache CASCADE;
-DROP FUNCTION IF EXISTS {schema}.cache_set(TEXT, TEXT, TEXT, INTEGER);
-DROP FUNCTION IF EXISTS {schema}.cache_get(TEXT, TEXT);
-DROP FUNCTION IF EXISTS {schema}.cache_delete(TEXT, TEXT);
-DROP FUNCTION IF EXISTS {schema}.cache_exists(TEXT, TEXT);
-DROP FUNCTION IF EXISTS {schema}.cache_cleanup();
-DROP FUNCTION IF EXISTS {schema}.cache_ttl(TEXT, TEXT);
-"""
-            cursor.execute(drop_sql)
+            # Use sql.SQL for safe schema name handling
+            cursor.execute(
+                sql.SQL("DROP TABLE IF EXISTS {}.cache CASCADE").format(
+                    sql.Identifier(schema)
+                )
+            )
+            
+            # Drop functions with schema-qualified names
+            drop_functions = [
+                sql.SQL("DROP FUNCTION IF EXISTS {}.cache_set(TEXT, TEXT, TEXT, INTEGER)").format(sql.Identifier(schema)),
+                sql.SQL("DROP FUNCTION IF EXISTS {}.cache_get(TEXT, TEXT)").format(sql.Identifier(schema)),
+                sql.SQL("DROP FUNCTION IF EXISTS {}.cache_delete(TEXT, TEXT)").format(sql.Identifier(schema)),
+                sql.SQL("DROP FUNCTION IF EXISTS {}.cache_exists(TEXT, TEXT)").format(sql.Identifier(schema)),
+                sql.SQL("DROP FUNCTION IF EXISTS {}.cache_cleanup()").format(sql.Identifier(schema)),
+                sql.SQL("DROP FUNCTION IF EXISTS {}.cache_ttl(TEXT, TEXT)").format(sql.Identifier(schema)),
+            ]
+            for drop_func in drop_functions:
+                cursor.execute(drop_func)
+            
             conn.commit()
         
-        # Create all objects (table and functions)
-        setup_sql = f"""
--- Create UNLOGGED table for caching with user isolation (only if not exists)
+        # Create all objects (table and functions) using safe SQL identifiers
+        
+        # Create table
+        cursor.execute(
+            sql.SQL("""
 CREATE UNLOGGED TABLE IF NOT EXISTS {schema}.cache (
     user_id TEXT NOT NULL,
     key TEXT NOT NULL,
@@ -120,23 +132,37 @@ CREATE UNLOGGED TABLE IF NOT EXISTS {schema}.cache (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     accessed_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     PRIMARY KEY (user_id, key)
-);
-
--- Create index for expiry cleanup (only if not exists)
+)
+            """).format(schema=sql.Identifier(schema))
+        )
+        
+        # Create indexes
+        cursor.execute(
+            sql.SQL("""
 CREATE INDEX IF NOT EXISTS idx_cache_expires_at ON {schema}.cache(expires_at) 
-WHERE expires_at IS NOT NULL;
-
--- Create index for user lookups (only if not exists)
-CREATE INDEX IF NOT EXISTS idx_cache_user_id ON {schema}.cache(user_id);
-
--- Function: SET a cache value with optional TTL
+WHERE expires_at IS NOT NULL
+            """).format(schema=sql.Identifier(schema))
+        )
+        
+        cursor.execute(
+            sql.SQL("""
+CREATE INDEX IF NOT EXISTS idx_cache_user_id ON {schema}.cache(user_id)
+            """).format(schema=sql.Identifier(schema))
+        )
+        
+        conn.commit()
+        
+        # Create functions - we need to use format with schema identifier
+        # Function: SET
+        cursor.execute(
+            sql.SQL("""
 CREATE OR REPLACE FUNCTION {schema}.cache_set(
     p_user_id TEXT,
     p_key TEXT,
     p_value TEXT,
     p_ttl_seconds INTEGER DEFAULT NULL
 )
-RETURNS BOOLEAN AS $$
+RETURNS BOOLEAN AS $body$
 DECLARE
     v_expires_at TIMESTAMP WITH TIME ZONE;
 BEGIN
@@ -156,11 +182,15 @@ BEGIN
     
     RETURN TRUE;
 END;
-$$ LANGUAGE plpgsql;
-
--- Function: GET a cache value
+$body$ LANGUAGE plpgsql
+            """).format(schema=sql.Identifier(schema))
+        )
+        
+        # Function: GET
+        cursor.execute(
+            sql.SQL("""
 CREATE OR REPLACE FUNCTION {schema}.cache_get(p_user_id TEXT, p_key TEXT)
-RETURNS TEXT AS $$
+RETURNS TEXT AS $body$
 DECLARE
     v_value TEXT;
     v_expires_at TIMESTAMP WITH TIME ZONE;
@@ -183,11 +213,15 @@ BEGIN
     
     RETURN v_value;
 END;
-$$ LANGUAGE plpgsql;
-
--- Function: DELETE a cache entry
+$body$ LANGUAGE plpgsql
+            """).format(schema=sql.Identifier(schema))
+        )
+        
+        # Function: DELETE
+        cursor.execute(
+            sql.SQL("""
 CREATE OR REPLACE FUNCTION {schema}.cache_delete(p_user_id TEXT, p_key TEXT)
-RETURNS BOOLEAN AS $$
+RETURNS BOOLEAN AS $body$
 DECLARE
     v_deleted INTEGER;
 BEGIN
@@ -195,11 +229,15 @@ BEGIN
     GET DIAGNOSTICS v_deleted = ROW_COUNT;
     RETURN v_deleted > 0;
 END;
-$$ LANGUAGE plpgsql;
-
--- Function: CHECK if a key exists
+$body$ LANGUAGE plpgsql
+            """).format(schema=sql.Identifier(schema))
+        )
+        
+        # Function: EXISTS
+        cursor.execute(
+            sql.SQL("""
 CREATE OR REPLACE FUNCTION {schema}.cache_exists(p_user_id TEXT, p_key TEXT)
-RETURNS BOOLEAN AS $$
+RETURNS BOOLEAN AS $body$
 DECLARE
     v_expires_at TIMESTAMP WITH TIME ZONE;
 BEGIN
@@ -218,11 +256,15 @@ BEGIN
     
     RETURN TRUE;
 END;
-$$ LANGUAGE plpgsql;
-
--- Function: GET TTL
+$body$ LANGUAGE plpgsql
+            """).format(schema=sql.Identifier(schema))
+        )
+        
+        # Function: TTL
+        cursor.execute(
+            sql.SQL("""
 CREATE OR REPLACE FUNCTION {schema}.cache_ttl(p_user_id TEXT, p_key TEXT)
-RETURNS INTEGER AS $$
+RETURNS INTEGER AS $body$
 DECLARE
     v_expires_at TIMESTAMP WITH TIME ZONE;
     v_ttl_seconds INTEGER;
@@ -248,11 +290,15 @@ BEGIN
     
     RETURN v_ttl_seconds;
 END;
-$$ LANGUAGE plpgsql;
-
--- Function: CLEANUP expired entries
+$body$ LANGUAGE plpgsql
+            """).format(schema=sql.Identifier(schema))
+        )
+        
+        # Function: CLEANUP
+        cursor.execute(
+            sql.SQL("""
 CREATE OR REPLACE FUNCTION {schema}.cache_cleanup()
-RETURNS INTEGER AS $$
+RETURNS INTEGER AS $body$
 DECLARE
     v_deleted INTEGER;
 BEGIN
@@ -263,25 +309,10 @@ BEGIN
     GET DIAGNOSTICS v_deleted = ROW_COUNT;
     RETURN v_deleted;
 END;
-$$ LANGUAGE plpgsql;
-
--- Create view for valid cache entries
-CREATE OR REPLACE VIEW {schema}.valid_cache AS
-SELECT 
-    user_id,
-    key,
-    value,
-    expires_at,
-    created_at,
-    accessed_at,
-    CASE 
-        WHEN expires_at IS NULL THEN -1
-        ELSE EXTRACT(EPOCH FROM (expires_at - NOW()))::INTEGER
-    END as ttl_seconds
-FROM {schema}.cache
-WHERE expires_at IS NULL OR expires_at > NOW();
-"""
-        cursor.execute(setup_sql)
+$body$ LANGUAGE plpgsql
+            """).format(schema=sql.Identifier(schema))
+        )
+        
         conn.commit()
 
 
@@ -329,6 +360,7 @@ def setup_cache(
         
         # Check if already setup
         already_setup = check_cache_setup(conn, schema)
+        print(f"Already setup: {already_setup}")
         
         if already_setup:
             if force:
@@ -372,7 +404,6 @@ def setup_cache(
 
 def run_admin_setup():
     """Run admin setup with command-line argument parsing"""
-    import argparse
     
     parser = argparse.ArgumentParser(
         description="FastPgCache Admin Setup Script (Admin/DBA Only)",
@@ -380,13 +411,13 @@ def run_admin_setup():
         epilog="""
 Examples:
   # Local PostgreSQL (requires password)
-  python admin_setup_cache.py --host localhost --user postgres --password mypass
+  python admin.py --host localhost --user postgres --password mypass
   
   # Setup with custom schema
-  python admin_setup_cache.py --host myhost --user admin --password mypass --schema my_cache
+  python admin.py --host myhost --user admin --password mypass --schema my_cache
   
   # Databricks - Local IDE development (with profile)
-  python admin_setup_cache.py \\
+  python admin.py \\
     --databricks \\
     --host myhost.cloud.databricks.com \\
     --database databricks_postgres \\
@@ -395,7 +426,7 @@ Examples:
     --profile DEFAULT
   
   # Databricks - Online notebook mode (no profile needed)
-  python admin_setup_cache.py \\
+  python admin.py \\
     --databricks \\
     --host myhost.cloud.databricks.com \\
     --database databricks_postgres \\
@@ -427,9 +458,6 @@ Examples:
     token_provider = None
     if args.databricks:
         try:
-            from databricks.sdk import WorkspaceClient
-            from fastpgcache import DatabricksTokenProvider
-            
             if not args.instance_name:
                 print("ERROR: --instance-name required when using --databricks")
                 sys.exit(1)

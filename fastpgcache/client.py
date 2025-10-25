@@ -2,7 +2,7 @@
 FastPgCache Client - Main interface for PostgreSQL caching
 """
 import psycopg2
-from psycopg2 import pool
+from psycopg2 import pool, sql
 from typing import Optional, Union
 import json
 from contextlib import contextmanager
@@ -21,7 +21,11 @@ class FastPgCache:
     - Connection pooling
     
     Example:
-        >>> cache = FastPgCache("postgresql://user:pass@localhost/mydb")
+        >>> cache = FastPgCache(host=host,
+                                database="databricks_postgres",
+                                user=user,
+                                token_provider=token_provider,
+                                schema="public")
         >>> cache.setup()  # Initialize cache tables and functions
         >>> cache.set("user:123", {"name": "Alice"}, ttl=3600)
         >>> cache.get("user:123")
@@ -178,7 +182,9 @@ class FastPgCache:
         with self._get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
-                    f"SELECT {self.schema}.cache_set(%s, %s, %s, %s)",
+                    sql.SQL("SELECT {}.cache_set(%s, %s, %s, %s)").format(
+                        sql.Identifier(self.schema)
+                    ),
                     (self.user_id, key, value, ttl)
                 )
                 result = cursor.fetchone()[0]
@@ -208,7 +214,12 @@ class FastPgCache:
         """
         with self._get_connection() as conn:
             with conn.cursor() as cursor:
-                cursor.execute(f"SELECT {self.schema}.cache_get(%s, %s)", (self.user_id, key))
+                cursor.execute(
+                    sql.SQL("SELECT {}.cache_get(%s, %s)").format(
+                        sql.Identifier(self.schema)
+                    ),
+                    (self.user_id, key)
+                )
                 result = cursor.fetchone()
                 
                 if result is None or result[0] is None:
@@ -241,7 +252,12 @@ class FastPgCache:
         """
         with self._get_connection() as conn:
             with conn.cursor() as cursor:
-                cursor.execute(f"SELECT {self.schema}.cache_delete(%s, %s)", (self.user_id, key))
+                cursor.execute(
+                    sql.SQL("SELECT {}.cache_delete(%s, %s)").format(
+                        sql.Identifier(self.schema)
+                    ),
+                    (self.user_id, key)
+                )
                 result = cursor.fetchone()[0]
                 conn.commit()
                 return result
@@ -262,7 +278,12 @@ class FastPgCache:
         """
         with self._get_connection() as conn:
             with conn.cursor() as cursor:
-                cursor.execute(f"SELECT {self.schema}.cache_exists(%s, %s)", (self.user_id, key))
+                cursor.execute(
+                    sql.SQL("SELECT {}.cache_exists(%s, %s)").format(
+                        sql.Identifier(self.schema)
+                    ),
+                    (self.user_id, key)
+                )
                 result = cursor.fetchone()[0]
                 return result
     
@@ -282,7 +303,12 @@ class FastPgCache:
         """
         with self._get_connection() as conn:
             with conn.cursor() as cursor:
-                cursor.execute(f"SELECT {self.schema}.cache_ttl(%s, %s)", (self.user_id, key))
+                cursor.execute(
+                    sql.SQL("SELECT {}.cache_ttl(%s, %s)").format(
+                        sql.Identifier(self.schema)
+                    ),
+                    (self.user_id, key)
+                )
                 result = cursor.fetchone()[0]
                 return result
     
@@ -299,7 +325,11 @@ class FastPgCache:
         """
         with self._get_connection() as conn:
             with conn.cursor() as cursor:
-                cursor.execute(f"SELECT {self.schema}.cache_cleanup()")
+                cursor.execute(
+                    sql.SQL("SELECT {}.cache_cleanup()").format(
+                        sql.Identifier(self.schema)
+                    )
+                )
                 result = cursor.fetchone()[0]
                 conn.commit()
                 return result
