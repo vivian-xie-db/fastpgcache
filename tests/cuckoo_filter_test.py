@@ -7,10 +7,7 @@ efficient membership queries and deletions.
 
 
 """
-import sys
-sys.path.insert(0, '../fastpgcache')
-#from fastpgcache import CuckooFilter
-from cuckoo_filter import CuckooFilter
+from fastpgcache import CuckooFilter
 import time
 import random
 import string

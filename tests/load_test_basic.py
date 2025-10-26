@@ -1,20 +1,31 @@
 """
 Basic load testing script for FastPgCache using threading.
 Tests concurrent reads/writes and measures performance.
+
+Supports both regular PostgreSQL and Databricks with simplified API.
 """
 import time
 import threading
 from fastpgcache import FastPgCache
-import random
 import statistics
 
-# Test configuration
-NUM_THREADS = 10
-OPERATIONS_PER_THREAD = 100
+# ============================================================================
+# Test Configuration
+# ============================================================================
+
+# Choose your mode by uncommenting one of the configurations below:
+
+
 HOST = "localhost"
 DATABASE = "postgres"
 USER = "postgres"
 PASSWORD = "password"
+INSTANCE_NAME = None
+PROFILE = None
+
+# Load test parameters
+NUM_THREADS = 10
+OPERATIONS_PER_THREAD = 100
 
 # Results storage
 results = {
@@ -28,13 +39,25 @@ results_lock = threading.Lock()
 def worker_thread(thread_id):
     """Worker thread that performs cache operations."""
     try:
+        # Build connection parameters
+        conn_params = {
+            'host': HOST,
+            'database': DATABASE,
+            'user': f"{USER}_thread{thread_id}",  # Isolated cache per thread
+            'schema': 'public'
+        }
+        
+        # Add Databricks parameters if configured
+        if INSTANCE_NAME:
+            conn_params['instance_name'] = INSTANCE_NAME
+            if PROFILE:
+                conn_params['profile'] = PROFILE
+        else:
+            # Regular PostgreSQL - add password
+            conn_params['password'] = PASSWORD
+        
         # Each thread gets its own connection
-        cache = FastPgCache(
-            host=HOST,
-            database=DATABASE,
-            user=f"user_{thread_id}",  # Isolated cache per user
-            password=PASSWORD
-        )
+        cache = FastPgCache(**conn_params)
         
         for i in range(OPERATIONS_PER_THREAD):
             key = f"test_key_{thread_id}_{i}"
@@ -98,11 +121,24 @@ def print_statistics(name, times):
 
 
 def main():
-    print(f"Starting load test...")
-    print(f"Threads: {NUM_THREADS}")
-    print(f"Operations per thread: {OPERATIONS_PER_THREAD}")
-    print(f"Total operations: {NUM_THREADS * OPERATIONS_PER_THREAD * 2}")  # SET + GET
-    print(f"\nRunning test...\n")
+    print("=" * 70)
+    print("FastPgCache Load Test")
+    print("=" * 70)
+    
+    # Display configuration
+    if INSTANCE_NAME:
+        print("\n🔐 Mode: Databricks")
+        print(f"   Instance: {INSTANCE_NAME}")
+        print(f"   Profile: {PROFILE if PROFILE else 'Default (online notebook)'}")
+    else:
+        print("\n🔐 Mode: Regular PostgreSQL")
+        print(f"   Host: {HOST}")
+    
+    print("\nTest Configuration:")
+    print(f"   Threads: {NUM_THREADS}")
+    print(f"   Operations per thread: {OPERATIONS_PER_THREAD}")
+    print(f"   Total operations: {NUM_THREADS * OPERATIONS_PER_THREAD * 2}")  # SET + GET
+    print("\nRunning test...\n")
     
     # Start timer
     start_time = time.time()
